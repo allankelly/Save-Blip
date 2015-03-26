@@ -59,6 +59,8 @@
 # download is safe!
 #
 ##############################################
+# 2015-03-26 allan.kelly@gmail.com
+# Changes commented inline with my email.
 
 if [[ $# -lt 3 ]]; then
 	echo "There are two forms of usage."
@@ -111,15 +113,26 @@ if [[ ! -d ${blip_entries_dir} ]]; then
 fi
 
 # Start by printing a front cover
-
-echo "Printing front cover for user ${user}...."
-wkhtmltopdf -q ${base_url}/${user} \
-	./${blip_entries_dir}/front_cover.pdf  \
-	> /dev/null 2>&1
+# 2015-03-26 allan.kelly@gmail.com
+# Added a check for existence
+if ! [ -s ./${blip_entries_dir}/front_cover.pdf ]
+then
+	echo "Printing front cover for user ${user}...."
+	wkhtmltopdf -q ${base_url}/${user} \
+		./${blip_entries_dir}/front_cover.pdf  \
+		> /dev/null 2>&1
+else
+	echo "Skipping front cover because it already exists"
+fi
 
 while [[ $previous_url != $final_url ]];
 do
-	wget -q -O ${tmp_file} $previous_url
+	while ! [ -s $tmp_file ]
+	do
+		echo "wget -v -O ${tmp_file} $previous_url"
+		# wget -q -O ${tmp_file} $previous_url
+		wget -q -O ${tmp_file} $previous_url
+	done
 	entry_date=$( grep 'JournalGallery","title":"' ${tmp_file} \
 		| sed 's/^.*JournalGallery","title":"//' \
 		| sed 's/".*$//' | sed 's/ /_/g' )
@@ -135,6 +148,10 @@ do
 			# Note
 			# The run-script function does not always work correctly
 			# hence the loop.
+			# 2015-03-26 allan.kelly@gmail.com
+			# Altered the timeout to 10 seconds
+			# Changed the grep to 'Done' instead of 'complete'
+
 			result=$( wkhtmltopdf ${previous_url} \
 				--no-stop-slow-scripts \
 				--run-script 'console.log(document.readyState);' \
@@ -142,12 +159,14 @@ do
 				--run-script  'load_comments.click();' \
 				--run-script  'load_comments.scrollIntoView(true);' \
 				--run-script  'load_comments.click();' \
-				--javascript-delay 2000  \
+				--javascript-delay 10000  \
 				--debug-javascript  \
 				${blip_entries_dir}/${entry_date}.pdf 2>&1 \
-				| grep "complete" )
+				| grep "Done" ) # AK: Changed 'complete' to 'Done'
+				#| grep "complete" )
+			echo "result from wkhtmltopdf == '$result'"
 			if [[ -z $result ]]; then
-				echo "Retrying...."
+				echo "Retrying $entry_date...." `date`
 				sleep 1
 			fi
 		done
